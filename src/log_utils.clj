@@ -25,15 +25,16 @@
   (with-open [rdr (io/reader filename)]
     (count (line-seq rdr))))
 
-(defn log-from-file [filename]
+(defn log-from-file [filename batch-size]
   (add-watch percent :percentage
              (fn [_ _ old-state new-state]
-               (when-not (= old-state new-state)
+               (when (and (> new-state 0)
+                          (not (= old-state new-state)))
                  (print-progress-bar new-state))))
   (with-open [rdr (io/reader filename)]
     (let [count-lines (count-lines filename)]
       (prn count-lines)
-      (doseq [line (partition 100 (line-seq rdr))]
+      (doseq [line (partition batch-size (line-seq rdr))]
         (try
           (let [resp @(http/post "http://localhost:10200/_bulk"
                                  {:headers {"Content-Type" "application/x-ndjson"}
@@ -46,15 +47,17 @@
                   (prn status)))))
           (catch Exception _ (save-to-file "bulk_error" (str @counter \newline)))
           (finally (swap! counter inc)
-                   (reset! percent (int (* (/ (* @counter 100) count-lines) 100)))))))
-    (println @counter)))
+                   (reset! percent (int (* (/ (* @counter batch-size) count-lines) 100)))))))
+    (println @counter)
+    (reset! counter 0)
+    (reset! percent 0)))
 
 (comment
-  (future (log-from-file "rest.ndjson"))
+  (future (log-from-file "aidbox_log.ndjson" 100))
   )
 
 (defn delete-empty-indexes [& _]
-  (let [es-url        "http://localhost:9200"
+  (let [es-url        "http://localhost:9201"
         indexes       (-> (http/get (str es-url "/_all/_settings?pretty"))
                           (deref)
                           :body
