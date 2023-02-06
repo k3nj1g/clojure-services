@@ -36,7 +36,7 @@
       (prn count-lines)
       (doseq [line (partition batch-size (line-seq rdr))]
         (try
-          (let [resp @(http/post "http://localhost:10200/_bulk"
+          (let [resp @(http/post "http://localhost:19200/_bulk"
                                  {:headers {"Content-Type" "application/x-ndjson"}
                                   :body    (reduce (fn [acc v] (str acc v \newline)) "" line)})]
             (when (> (:status resp) 299)
@@ -47,7 +47,8 @@
                   (prn status)))))
           (catch Exception _ (save-to-file "bulk_error" (str @counter \newline)))
           (finally (swap! counter inc)
-                   (reset! percent (int (* (/ (* @counter batch-size) count-lines) 100)))))))
+                   (reset! percent (int (* (/ (* @counter batch-size) count-lines) 100)))
+                   (spit "processed" (* @counter batch-size))))))
     (println @counter)
     (reset! counter 0)
     (reset! percent 0)))
